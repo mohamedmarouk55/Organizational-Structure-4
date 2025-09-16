@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الهيكل التنظيمي</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #3498db;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #f8f9fa;
+        }
+        .upload-area:hover {
+            background-color: #e9ecef;
+        }
+        .org-chart {
+            overflow: auto;
+            padding: 20px 0;
+            max-height: 70vh;
+        }
+        .node {
+            margin: 10px 0;
+            padding: 15px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .toggle-icon {
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            width: 20px;
+            text-align: center;
+        }
+        .children {
+            padding-right: 30px;
+            border-right: 2px dashed #bdc3c7;
+            margin-right: 15px;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+        .children.hidden {
+            display: none;
+        }
+        .level-0 {
+            background-color: #e74c3c;
+            font-size: 18px;
+        }
+        .level-1 {
+            background-color: #3498db;
+        }
+        .level-2 {
+            background-color: #2ecc71;
+        }
+        .level-3 {
+            background-color: #f39c12;
+        }
+        .level-4 {
+            background-color: #9b59b6;
+        }
+        .level-5 {
+            background-color: #1abc9c;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>الهيكل التنظيمي</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <h3>اسحب وأفلت ملف Excel هنا</h3>
+            <p>أو</p>
+            <input type="file" id="fileInput" accept=".xlsx, .xls" style="display: none;">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">اختر ملف Excel</button>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" id="collapseAllBtn">طي الكل</button>
+            <button class="btn" id="expandAllBtn">توسيع الكل</button>
+        </div>
+        
+        <div class="org-chart" id="orgChart">
+            <div class="loading">يرجى رفع ملف Excel لعرض الهيكل التنظيمي</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let orgData = null;
+        
+        // معالجة رفع الملف
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+        
+        // معالجة السحب والإفلات
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#e9ecef';
+        });
+        
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#f8f9fa';
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#f8f9fa';
+            
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+        
+        function handleFile(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // الحصول على أول ورقة في الملف
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // تحويل البيانات إلى JSON
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // معالجة البيانات
+                    processExcelData(jsonData);
+                    
+                } catch (error) {
+                    console.error('خطأ في معالجة الملف:', error);
+                    alert('حدث خطأ أثناء معالجة الملف. يرجى التأكد من أن الملف بصيغة Excel وصحيح.');
+                }
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function processExcelData(data) {
+            // البحث عن رؤوس الأعمدة
+            let headers = [];
+            let startRow = 0;
+            
+            for (let i = 0; i < data.length; i++) {
+                if (Array.isArray(data[i]) && data[i].length > 0) {
+                    if (data[i].some(cell => typeof cell === 'string' && cell.includes('الرقم الوظيفي')) &&
+                        data[i].some(cell => typeof cell === 'string' && cell.includes('الاسم كاملاً باللغة العربية'))) {
+                        headers = data[i].filter(cell => cell !== undefined && cell !== null);
+                        startRow = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            if (headers.length === 0) {
+                throw new Error('لم يتم العثور على رؤوس الأعمدة المناسبة في ملف Excel');
+            }
+            
+            // تعيين فهرس كل عمود
+            const columnIndices = {};
+            headers.forEach((header, index) => {
+                if (typeof header === 'string') {
+                    if (header.includes('الرقم الوظيفي')) columnIndices.id = index;
+                    else if (header.includes('الاسم كاملاً باللغة العربية')) columnIndices.name = index;
+                    else if (header.includes('المسمى الوظيفي')) columnIndices.jobTitle = index;
+                    else if (header.includes('المدير المباشر')) columnIndices.directManager = index;
+                }
+            });
+            
+            // التحقق من وجود الأعمدة الأساسية
+            if (!columnIndices.name || !columnIndices.jobTitle) {
+                throw new Error('لم يتم العثور على الأعمدة الأساسية (الاسم، المسمى الوظيفي) في ملف Excel');
+            }
+            
+            // معالجة بيانات الموظفين
+            const employees = [];
+            for (let i = startRow; i < data.length; i++) {
+                const row = data[i];
+                if (!Array.isArray(row) || row.length === 0) continue;
+                
+                if (!row[columnIndices.name] || row[columnIndices.name] === '') continue;
+                
+                const employee = {
+                    id: row[columnIndices.id] ? row[columnIndices.id].toString() : 'emp_' + Date.now() + '_' + i,
+                    name: row[columnIndices.name] ? row[columnIndices.name].toString() : '',
+                    jobTitle: row[columnIndices.jobTitle] ? row[columnIndices.jobTitle].toString() : '',
+                    directManager: row[columnIndices.directManager] ? row[columnIndices.directManager].toString() : '',
+                    children: [],
+                    isExpanded: true
+                };
+                
+                employees.push(employee);
+            }
+            
+            // بناء الهيكل التنظيمي
+            buildOrgStructure(employees);
+            renderOrgChart();
+        }
+        
+        function buildOrgStructure(employees) {
+            // إنشاء خريطة للموظفين
+            const employeeMap = new Map();
+            employees.forEach(emp => {
+                employeeMap.set(emp.id, {...emp, children: [], isExpanded: true});
+            });
+            
+            // ربط الموظفين بمديريهم
+            employees.forEach(emp => {
+                if (emp.directManager && emp.directManager.trim() !== '' && emp.directManager !== 'ــــــــــــــــــــــــــــــــــــــــــــــ') {
+                    const manager = employees.find(m => m.name === emp.directManager);
+                    if (manager) {
+                        const managerNode = employeeMap.get(manager.id);
+                        if (managerNode) {
+                            managerNode.children.push(employeeMap.get(emp.id));
+                        }
+                    }
+                }
+            });
+            
+            // العثور على الجذر
+            const rootEmployees = employees.filter(emp => 
+                !emp.directManager || 
+                emp.directManager.trim() === '' || 
+                emp.directManager === 'ــــــــــــــــــــــــــــــــــــــــــــــ'
+            );
+            
+            if (rootEmployees.length > 0) {
+                orgData = employeeMap.get(rootEmployees[0].id);
+            } else if (employees.length > 0) {
+                orgData = employeeMap.get(employees[0].id);
+            } else {
+                orgData = {
+                    id: 'root',
+                    name: 'الرئيس التنفيذي',
+                    jobTitle: 'رئيس تنفيذي',
+                    directManager: '',
+                    children: [],
+                    isExpanded: true
+                };
+            }
+        }
+
+        // دالة لعرض الهيكل التنظيمي
+        function renderOrgChart() {
+            const orgChart = document.getElementById('orgChart');
+            if (!orgData) {
+                orgChart.innerHTML = '<div class="loading">يرجى رفع ملف Excel لعرض الهيكل التنظيمي</div>';
+                return;
+            }
+            orgChart.innerHTML = '';
+            orgChart.appendChild(createNodeElement(orgData, 0));
+        }
+
+        // دالة لإنشاء عنصر عقدة
+        function createNodeElement(node, level) {
+            const nodeDiv = document.createElement('div');
+            nodeDiv.className = `node level-${level}`;
+            nodeDiv.dataset.id = node.id;
+
+            const nodeHeader = document.createElement('div');
+            nodeHeader.className = 'node-header';
+            
+            const titleDiv = document.createElement('div');
+            titleDiv.style.display = 'flex';
+            titleDiv.style.alignItems = 'center';
+            titleDiv.style.gap = '10px';
+            
+            // إضافة أيقونة الطي/التوسيع إذا كان للعقدة أطفال
+            if (node.children && node.children.length > 0) {
+                const toggleIcon = document.createElement('span');
+                toggleIcon.className = 'toggle-icon';
+                toggleIcon.innerHTML = node.isExpanded ? '▼' : '▶';
+                toggleIcon.onclick = function(e) {
+                    e.stopPropagation();
+                    toggleNode(node.id);
+                };
+                titleDiv.appendChild(toggleIcon);
+            }
+            
+            const titleText = document.createElement('span');
+            titleText.innerHTML = `<strong>${node.name}</strong> - ${node.jobTitle}`;
+            titleDiv.appendChild(titleText);
+            
+            nodeHeader.appendChild(titleDiv);
+            nodeDiv.appendChild(nodeHeader);
+            
+            if (node.children && node.children.length > 0) {
+                const childrenDiv = document.createElement('div');
+                childrenDiv.className = `children ${node.isExpanded ? '' : 'hidden'}`;
+                
+                // فرز الأطفال أبجديًا حسب الاسم
+                const sortedChildren = [...node.children].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+                
+                sortedChildren.forEach(child => {
+                    childrenDiv.appendChild(createNodeElement(child, level + 1));
+                });
+                
+                nodeDiv.appendChild(childrenDiv);
+            }
+            
+            return nodeDiv;
+        }
+
+        // دالة للطي أو التوسيع
+        function toggleNode(nodeId) {
+            function findAndToggle(node, targetId) {
+                if (node.id === targetId) {
+                    node.isExpanded = !node.isExpanded;
+                    return true;
+                }
+                
+                if (node.children) {
+                    for (let child of node.children) {
+                        if (findAndToggle(child, targetId)) {
+                            return true;
+                        }
+                    }
+                }
+                
+                return false;
+            }
+            
+            findAndToggle(orgData, nodeId);
+            renderOrgChart();
+        }
+
+        // دالة للطي الكل
+        function collapseAll() {
+            function collapseNode(node) {
+                node.isExpanded = false;
+                if (node.children) {
+                    node.children.forEach(child => collapseNode(child));
+                }
+            }
+            
+            if (orgData) {
+                collapseNode(orgData);
+                renderOrgChart();
+            }
+        }
+
+        // دالة للتوسيع الكل
+        function expandAll() {
+            function expandNode(node) {
+                node.isExpanded = true;
+                if (node.children) {
+                    node.children.forEach(child => expandNode(child));
+                }
+            }
+            
+            if (orgData) {
+                expandNode(orgData);
+                renderOrgChart();
+            }
+        }
+
+        // ربط أزرار الطي والتوسيع
+        document.getElementById('collapseAllBtn').onclick = collapseAll;
+        document.getElementById('expandAllBtn').onclick = expandAll;
+    </script>
+</body>
+</html>
